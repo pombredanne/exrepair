@@ -11,3 +11,11 @@
 *.lai
 *.la
 *.a
+
+# Temporary Files
+*~
+\#*\#
+
+# Execution Files
+*.out
+*.exe
