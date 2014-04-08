@@ -20,7 +20,7 @@
 #include "cpm.h"
 
 //#define DEBUG
-//#define DISPLAY
+#define DISPLAY
 
 #define INPUT_BUF_SIZE 32768
 
@@ -406,7 +406,6 @@ PMM *mkPMM(uchar *pat, uint plen, uint code_len, DICT *dict)
 	if (num_rules[q] <= c) {
 	  continue;
 	}
-	
 	lc = d[q][c].left;
 	rc = d[q][c].right;
 	p = GoTo[s][lc];

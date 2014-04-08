@@ -1,5 +1,5 @@
 /* 
- *  Copyright (c) 2011 Shirou Maruyama
+ *  Copyright (c) 2011-2012 Shirou Maruyama
  * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -17,19 +17,23 @@
  *      software without specific prior written permission.
  */
 
-
-#ifndef CDESPAIR_H
-#define CDESPAIR_H
+#ifndef GETID_H
+#define GETID_H
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <limits.h>
 #include "basics.h"
-#include "bits.h"
-#include "cont.h"
 
-bool RunCodeDespair(FILE *input, FILE *output);
 
-#endif
+void getContext(uint mchar_size, uint cont_len, PCODE id, uchar *context);
+PCODE getContextBegID(uint mchar_size, uint cont_len, 
+		      uchar *cont_suffix, uint suffix_len);
+PCODE getContextEndID(uint mchar_size, uint cont_len, 
+		      uchar *cont_suffix, uint suffix_len);
+PCODE getContextID(uint mchar_size, uint cont_len, uchar *cont_suffix);
+uint getContextRangeSize(uint mchar_size, uint cont_len, uint suffix_len);
+
+
+#endif /* GETID_H */

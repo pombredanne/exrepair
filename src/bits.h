@@ -26,6 +26,8 @@
 #include <limits.h>
 #include "basics.h"
 
+
+/* BITOUT 64bits */
 typedef struct bit_output64 {
   FILE *output;
   uint  emplen;
@@ -38,8 +40,10 @@ typedef struct bit_output64 {
 BITOUT *createBitout(FILE *output);
 void writeBits(BITOUT *bitout, ulong symbol, uint writeBitLen);
 void flushBitout(BITOUT *bitout);
+void destructBitout(BITOUT *bitout);
 
 
+/* BITOUT 32bits */
 typedef struct bit_output32 {
   FILE *output;
   uint  emplen;
@@ -52,8 +56,10 @@ typedef struct bit_output32 {
 BITOUT32 *createBitout32(FILE *output);
 void writeBits32(BITOUT32 *bitout, uint symbol, uint writeBitLen);
 void flushBitout32(BITOUT32 *bitout);
+void destructBitout32(BITOUT32 *bitout);
 
 
+/* BITIN 64bits */
 typedef struct bit_input64 {
   FILE *input;
   uint  bitlen;
@@ -65,8 +71,10 @@ typedef struct bit_input64 {
 
 BITIN *createBitin(FILE *input);
 ulong readBits(BITIN *bitin, uint readBitLen);
+void destructBitin(BITIN *bitin);
 
 
+/* BITIN 32bits */
 typedef struct bit_input32 {
   FILE *input;
   uint  bitlen;
@@ -78,5 +86,6 @@ typedef struct bit_input32 {
 
 BITIN32 *createBitin32(FILE *input);
 uint readBits32(BITIN32 *bitin, uint readBitLen);
+void destructBitin32(BITIN32 *bitin);
 
 #endif

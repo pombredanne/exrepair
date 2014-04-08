@@ -1,5 +1,5 @@
 /* 
- *  Copyright (c) 2011 Shirou Maruyama
+ *  Copyright (c) 2011-2012 Shirou Maruyama
  * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -18,7 +18,7 @@
  */
 
 
-#ifdef EXREPAIR
+#ifdef CREPAIR
 #include "exrepair.h"
 
 int main(int argc, char *argv[])
@@ -26,10 +26,10 @@ int main(int argc, char *argv[])
   char *target_filename;
   char output_filename[256];
   FILE *input, *output;
-  uint code_len;
+  uint code_len, cont_len, cont_size;
   DICT *dict;
 
-  if (argc != 2 && argc != 3) {
+  if (argc != 4 && argc != 5) {
     printf("usage: %s target_text_file [code_length (bits)]\n", argv[0]);
     printf("default code_length: 8 bits\n");
     exit(1);
@@ -40,12 +40,24 @@ int main(int argc, char *argv[])
 
   if (argc == 2) {
     code_len = 8;
+    cont_len = 1;
+    cont_size = 256;
     strcat(output_filename, ".cr8");
   }
   else {
     code_len = atoi(argv[2]);
-    if (code_len < 8 || code_len > 16) {
-      printf("range of code length: 8-16 (bits)\n"); 
+    if (code_len < 8 || code_len > 24) {
+      printf("range of code length: 8-24 (bits)\n"); 
+      exit(1);
+    }
+    cont_len = atoi(argv[3]);
+    if (cont_len < 1 || cont_len > 3) {
+      printf("range of context length: 1-3\n");
+      exit(1);
+    }
+    cont_size = atoi(argv[4]);
+    if (cont_size < 1 || cont_size > 256) {
+      printf("range of context size: 1-256");
       exit(1);
     }
     strcat(output_filename, ".cr");
@@ -60,8 +72,7 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  dict = RunCodeRepair(input, code_len);
-
+  dict = RunCodeRepair(input, code_len, cont_len, cont_size);
   OutputCompTxt(dict, output);
   DestructDict(dict);
 
@@ -72,7 +83,7 @@ int main(int argc, char *argv[])
 #endif
 
 
-#ifdef EXDESPAIR
+#ifdef CDESPAIR
 #include "exdespair.h"
 
 int main(int argc, char *argv[])

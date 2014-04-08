@@ -20,7 +20,12 @@
 #ifndef BASICS_H
 #define BASICS_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 #include <limits.h>
+#include <stdbool.h>
 
 #ifndef LOG2
 # define LOG2(X) (log((double)(X))/log((double)2))
@@ -28,9 +33,9 @@
 #define MAX_CHAR_SIZE 256
 #define DUMMY_CODE UINT_MAX
 #define DUMMY_POS UINT_MAX
-#define HEAD_PCHAR 0
+#define HEAD_PCODE 0
 
-#define INT_BITS 32
+#define INT_BITS  32
 #define LONG_BITS 64
 
 #ifndef uchar
@@ -42,14 +47,17 @@ typedef unsigned int uint;
 #ifndef ushort
 typedef unsigned short ushort;
 #endif
+#ifndef ulong
+typedef unsigned long ulong;
+#endif
+#ifndef bool
+typedef _Bool bool;
+#endif
 #ifndef CODE
 typedef unsigned int CODE;
 #endif
 #ifndef PCODE
-typedef unsigned char PCODE;
-#endif
-#ifndef ulong
-typedef unsigned long ulong;
+typedef unsigned int PCODE;
 #endif
 
 #ifndef true
@@ -57,5 +65,4 @@ typedef unsigned long ulong;
 # define true  1
 #endif
 
-
-#endif
+#endif /* BASICS_H */

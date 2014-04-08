@@ -1,5 +1,5 @@
 /* 
- *  Copyright (c) 2011 Shirou Maruyama
+ *  Copyright (c) 2011-2012 Shirou Maruyama
  * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -25,11 +25,11 @@
 #define DISPLAY
 #define INLINE __inline
 
-#define THRESHOLD 3
+#define THRESHOLD (3)
 #define INIT_DICTIONARY_SIZE (256*1024)
 #define DICTIONARY_SCALING_FACTOR (1.25)
-#define INIT_HASH_NUM 12
-#define LOAD_FACTOR 1.0
+#define INIT_HASH_NUM (12)
+#define LOAD_FACTOR (1.0)
 
 static const uint primes[] = {
   /* 0*/  8 + 3,
@@ -65,54 +65,57 @@ static const uint primes[] = {
 
 typedef struct Sequence_block {
   CODE  code;   //code in block
-  PCODE pchar;  //previous character
+  PCODE pcode;  //previous code
   uint  next;   //position of next occurrence
   uint  prev;   //position of previous occurrence
 } SEQ;
 
 typedef struct Pair_info {
-  CODE  left;    //left code
-  CODE  right;   //right code
-  PCODE pchar;   //previous character
-  uint  freq;    //#occurences
-  uint  f_pos;   //position of left-most occurrence
-  uint  b_pos;   //position of (current) right-most occurence
+  CODE  left;   //left code
+  CODE  right;  //right code
+  PCODE pcode;  //previous context id
+  uint  freq;   //#occurences
+  uint  f_pos;  //position of left-most occurrence
+  uint  b_pos;  //position of (current) right-most occurence
   struct Pair_info *h_next; //for hash chain
   struct Pair_info *p_next; //for priority queue
   struct Pair_info *p_prev; //for priority queue
 } PAIR;
 
 typedef struct Priority_queue {
-  uint num_pairs; //#recorded pairs
-  uint h_num;     //primes[h_num] represents len of h_entry
-  PAIR **h_entry; //for hash entry
-  uint p_max;     //length of p_head (square root of text length)
-  uint mp_pos;    //current position of maximum non-empty queue
-  PAIR **p_head;  //heads of priority queue
+  uint num_pairs; //#recorded pairs.
+  uint h_num;     //primes[h_num] represents len of h_entry.
+  PAIR **h_entry; //for hash entry.
+  uint p_max;     //length of p_head (square root of text length).
+  uint mp_pos;    //current position of maximum non-empty queue.
+  PAIR **p_head;  //heads of priority queue.
 } PQUE;
 
 typedef struct CodeRePair_data_structures {
-  uint txt_len;     //length of text
-  uint char_size;   //size of initial alphabet
-  CODE *char_table; //maps original chara to encoded chara.
-  SEQ  *seq;        //sequence
-  PQUE **p_que;     //pointers for priority queues.
+  uint txt_len;       //length of text.
+  uint char_size;     //size of initial alphabet.
+  CODE *char_table;   //maps original chara to encoded chara.
+  uint cont_len;      //length of context.
+  uint mchar_size;    //size of mapped charater.
+  uchar *mchar_table; //table of mapped character.
+  uint num_contexts;  //#contexts.
+  SEQ  *seq;          //sequence.
+  PQUE **p_que;       //pointers for priority queues.
 } CRDS;
 
-static CRDS *createCRDS      (FILE *input);
+static CRDS *createCRDS      (FILE *input, uint cont_len, uint mchar_size);
 static void destructCRDS     (CRDS *crds);
-static PAIR *locatePair      (CRDS *crds, PCODE pchar, CODE left, CODE right);
-static void rehash           (CRDS *crds, PCODE pchar);
+static PAIR *locatePair      (CRDS *crds, PCODE pcode, CODE left, CODE right);
+static void rehash           (CRDS *crds, PCODE pcode);
 static void insertPair       (CRDS *crds, PAIR *target);
 static void removePair       (CRDS *crds, PAIR *target);
 static void incrementPair    (CRDS *crds, PAIR *target);
 static void decrementPair    (CRDS *crds, PAIR *target);
-static PAIR *createPair      (CRDS *crds, PCODE pchar, 
-			      CODE left, CODE right, uint f_pos);
+static PAIR *createPair      (CRDS *crds, PCODE pcode, 
+			      CODE left,  CODE right, uint f_pos);
 static void destructPair     (CRDS *crds, PAIR *target);
-static void deletePQ         (CRDS *crds, uint p_pos, PCODE pchar);
-static void initCRDS         (CRDS *crds);
-static PAIR *getMaxPair      (CRDS *crds, PCODE pchar);
+static void deletePQ         (CRDS *crds, uint p_pos, PCODE pcode);
+static PAIR *getMaxPair      (CRDS *crds, PCODE pcode);
 static uint leftPos          (CRDS *crds, uint pos);
 static uint rightPos         (CRDS *crds, uint pos);
 static void removeLink       (CRDS *crds, uint target_pos);
@@ -122,26 +125,21 @@ static void copyCompSeq      (CRDS *crds, DICT *dict);
 static DICT *createDict      (CRDS *crds, uint code_len);
 
 static int comparePair       (const void *a, const void *b); //for qsort
-static double calCompRatio   (uint txt_len, uint char_size, uint seq_len, 
-			      uint op_num_rules, uint code_len, bool print);
+static double calCompRatio   (uint txt_len, uint char_size, uint cont_len,
+			      uint num_contexts,uint seq_len, uint t_num_rules,
+			      uint code_len, bool print);
 static CODE addNewPair       (DICT *dict, CODE new_code, PAIR *max_pair);
 static void outputCompTxt8   (DICT *dict, FILE *output);
 static void outputCompTxt16  (DICT *dict, FILE *output);
 static void outputCompTxtVar (DICT *dict, FILE *output);
 
-#if true
-#define hash_val(N, A, B) ((A)*(B))%(primes[(N)])
-#else
-static INLINE
-uint hash_val(uint h_num, CODE left, CODE right) {
-  return (left * right) % primes[h_num];
-}
-#endif
+//#define hash_val(N, A, B) (((A)<<16)|(B))%(primes[(N)])
+#define hash_val(N, A, B) (((A)*(B+1))%(primes[(N)]))
 
 static INLINE
-PAIR *locatePair(CRDS *crds, PCODE pchar, CODE left, CODE right) {
-  PQUE *p_que = crds->p_que[pchar];
-  uint h  = hash_val(p_que->h_num, left, right);
+PAIR *locatePair(CRDS *crds, PCODE pcode, CODE left, CODE right) {
+  PQUE *p_que = crds->p_que[pcode];
+  uint  h = hash_val(p_que->h_num, left, right);
   PAIR *p = p_que->h_entry[h];
 
   while (p != NULL) {
@@ -155,13 +153,13 @@ PAIR *locatePair(CRDS *crds, PCODE pchar, CODE left, CODE right) {
 }
 
 static
-void rehash(CRDS *crds, PCODE pchar)
+void rehash(CRDS *crds, PCODE pcode)
 {
   PAIR *p, *q;
-  PQUE *p_que = crds->p_que[pchar];
+  PQUE *p_que = crds->p_que[pcode];
   uint i, h_num, h;
   
-  h_num = ++(p_que->h_num);
+  h_num = ++p_que->h_num;
   p_que->h_entry = 
     (PAIR **)realloc(p_que->h_entry, sizeof(PAIR *) * primes[h_num]);
   for (i = 0; i < primes[h_num]; i++) {
@@ -186,9 +184,9 @@ static INLINE
 void insertPair(CRDS *crds, PAIR *target)
 {
   PAIR *tmp;
-  PCODE pchar = target->pchar;
+  PCODE pcode = target->pcode;
   uint p_num  = target->freq;
-  PQUE *p_que = crds->p_que[pchar];
+  PQUE *p_que = crds->p_que[pcode];
 
   if (p_num >= p_que->p_max) {
     p_num = 0;
@@ -206,8 +204,8 @@ void insertPair(CRDS *crds, PAIR *target)
 static INLINE
 void removePair(CRDS *crds, PAIR *target)
 {
-  CODE pchar  = target->pchar;
-  PQUE *p_que = crds->p_que[pchar];
+  CODE pcode  = target->pcode;
+  PQUE *p_que = crds->p_que[pcode];
   uint p_num  = target->freq;
 
   if (p_num >= p_que->p_max) {
@@ -231,7 +229,7 @@ void removePair(CRDS *crds, PAIR *target)
 static INLINE
 void destructPair(CRDS *crds, PAIR *target)
 {
-  PQUE *p_que = crds->p_que[target->pchar];
+  PQUE *p_que = crds->p_que[target->pcode];
   uint  h = hash_val(p_que->h_num, target->left, target->right);
   PAIR *p = p_que->h_entry[h];
   PAIR *q = NULL;
@@ -239,7 +237,7 @@ void destructPair(CRDS *crds, PAIR *target)
   removePair(crds, target);
 
   while (p != NULL) {
-    if (p->pchar == target->pchar && 
+    if (p->pcode == target->pcode && 
 	p->left  == target->left  && 
 	p->right == target->right) {
       break;
@@ -247,8 +245,6 @@ void destructPair(CRDS *crds, PAIR *target)
     q = p;
     p = p->h_next;
   }
-
-  assert(p != NULL);
 
   if (q == NULL) {
     p_que->h_entry[h] = p->h_next;
@@ -263,7 +259,7 @@ void destructPair(CRDS *crds, PAIR *target)
 static INLINE
 void incrementPair(CRDS *crds, PAIR *target)
 {
-  PQUE *p_que = crds->p_que[target->pchar];
+  PQUE *p_que = crds->p_que[target->pcode];
   if (target->freq >= p_que->p_max) {
     target->freq++;
     return;
@@ -276,7 +272,7 @@ void incrementPair(CRDS *crds, PAIR *target)
 static INLINE
 void decrementPair(CRDS *crds, PAIR *target)
 {
-  PQUE *p_que = crds->p_que[target->pchar];
+  PQUE *p_que = crds->p_que[target->pcode];
 
   if (target->freq > p_que->p_max) {
     target->freq--;
@@ -294,14 +290,14 @@ void decrementPair(CRDS *crds, PAIR *target)
 }
 
 static INLINE
-PAIR *createPair(CRDS *crds, PCODE pchar, CODE left, CODE right, uint f_pos)
+PAIR *createPair(CRDS *crds, PCODE pcode, CODE left, CODE right, uint f_pos)
 {
   PAIR *pair = (PAIR *)malloc(sizeof(PAIR));
   uint h;
   PAIR *q;
-  PQUE *p_que = crds->p_que[pchar];
+  PQUE *p_que = crds->p_que[pcode];
 
-  pair->pchar  = pchar;
+  pair->pcode  = pcode;
   pair->left   = left;
   pair->right  = right;
   pair->freq   = 1;
@@ -311,7 +307,7 @@ PAIR *createPair(CRDS *crds, PCODE pchar, CODE left, CODE right, uint f_pos)
   p_que->num_pairs++;
 
   if (p_que->num_pairs >= primes[p_que->h_num]) {
-    rehash(crds, pchar);
+    rehash(crds, pcode);
   }
 
   h = hash_val(p_que->h_num, left, right);
@@ -325,9 +321,9 @@ PAIR *createPair(CRDS *crds, PCODE pchar, CODE left, CODE right, uint f_pos)
 }
 
 static
-void deletePQ(CRDS *crds, uint p_pos, PCODE pchar)
+void deletePQ(CRDS *crds, uint p_pos, PCODE pcode)
 {
-  PQUE *p_que = crds->p_que[pchar];
+  PQUE *p_que = crds->p_que[pcode];
   PAIR *pair  = p_que->p_head[p_pos];
   PAIR *q;
 
@@ -340,57 +336,34 @@ void deletePQ(CRDS *crds, uint p_pos, PCODE pchar)
 }
 
 static
-void initCRDS(CRDS *crds)
-{
-  uint i;
-  SEQ *seq = crds->seq;
-  uint size_w = crds->txt_len;
-  PCODE P;
-  CODE A, B;
-  PAIR *pair;
-
-  for (i = 0; i < size_w - 1; i++) {
-    P = seq[i].pchar;
-    A = seq[i].code;
-    B = seq[i+1].code;
-    if ((pair = locatePair(crds, P, A, B)) == NULL) {
-      pair = createPair(crds, P, A, B, i);
-    }
-    else {
-      seq[i].prev = pair->b_pos;
-      seq[i].next = DUMMY_POS;
-      seq[pair->b_pos].next = i;
-      pair->b_pos = i;
-      incrementPair(crds, pair);
-    }
-  }
-  for (i = 0; i < crds->char_size; i++) {
-    deletePQ(crds, 1, i);
-  }
-}
-
-static 
-CRDS *createCRDS(FILE *input)
+CRDS *createCRDS(FILE *input, uint cont_len, uint mchar_size)
 {
   uint size_w;
-  uint i, j;
   SEQ  *seq;
   uint char_size;
   bool check_table[MAX_CHAR_SIZE];
-  CODE *char_table;
+  uint char_freq[MAX_CHAR_SIZE];
+  CODE  *char_table;
+  uchar *mchar_table;
+  uint num_contexts = (uint)pow(mchar_size, cont_len);
   PQUE **p_que;
   uint p_max;
   CRDS *crds;
 
-  fseek(input,0,SEEK_END);
+  fseek(input, 0, SEEK_END);
   size_w = ftell(input);
   rewind(input);
-  seq = (SEQ *)malloc(sizeof(SEQ)*size_w);
-  char_table = (CODE *)malloc(sizeof(CODE) * MAX_CHAR_SIZE);
+  seq = (SEQ *)malloc(sizeof(SEQ) * size_w);
+  char_table  = (CODE *)malloc(sizeof(CODE) * MAX_CHAR_SIZE);
+  mchar_table = (uchar *)malloc(sizeof(uchar) * MAX_CHAR_SIZE);
 
-  for (i = 0; i < MAX_CHAR_SIZE; i++) {
-    check_table[i] = false;
-    char_table[i] = DUMMY_CODE;
+  {
+    uint i;
+    for (i = 0; i < MAX_CHAR_SIZE; i++) {
+      check_table[i] = false;
+      char_table[i]  = DUMMY_CODE;
+      char_freq[i]   = 0;
+    }
   }
 
   char_size = 0;
@@ -409,53 +382,149 @@ CRDS *createCRDS(FILE *input)
     }
   }
 
-  for (i = 0, j = 0; i < MAX_CHAR_SIZE; i++) {
-    if (check_table[i] == true) {
-      char_table[i] = (CODE)j++;
+  if (char_size <= mchar_size) {
+    mchar_size = char_size;
+  }
+
+  {
+    uint i, j;
+    for (i = 0, j = 0; i < MAX_CHAR_SIZE; i++) {
+      if (check_table[i] == true) {
+	char_table[i] = (CODE)j++;
+      }
     }
   }
 
-  assert(char_size == j);
-
   {
-    PCODE pchar = HEAD_PCHAR;
     uint i = 0; 
     while (i < size_w) {
-      seq[i].pchar = pchar;
-      seq[i].code = pchar = char_table[seq[i].code];
+      seq[i].code = char_table[seq[i].code];
+      char_freq[seq[i].code]++;
       i++;
     }
   }
 
-  p_max = (uint)ceil(sqrt((double)size_w));
+  if (mchar_size < char_size) {
+    uint i, j;
+    int k = 0;
+    uchar max_code = 0;
+    uint max;
+    bool up_flag = true;
+    for (i = 0; i < char_size; i++) {
+      max = 0;
+      for (j = 0; j < char_size; j++) {
+	if (char_freq[j] > max) {
+	  max_code = (uchar)j;
+	  max = char_freq[j];
+	}
+      }
+      char_freq[max_code] = 0;
+      mchar_table[max_code] = k;
+      if (up_flag == true) {
+	k++;
+	if (k == mchar_size) {
+	  k = mchar_size - 1;
+	  up_flag = false;
+	}
+      }
+      else {
+	k--;
+	if (k < 0) {
+	  k = 0;
+	  up_flag = true;
+	}
+      }
+    }
+  }
+  else {
+    uint i;
+    for (i = 0; i < char_size; i++) {
+      mchar_table[i] = i;
+    }
+  }
 
-  p_que = (PQUE **)malloc(sizeof(PQUE *)*char_size);
-  for (i = 0; i < char_size; i++) {
-    p_que[i] = (PQUE *)malloc(sizeof(PQUE));
-    p_que[i]->h_entry = 
-      (PAIR **)malloc(sizeof(PAIR *) * primes[INIT_HASH_NUM]);
-    for (j = 0; j < primes[INIT_HASH_NUM]; j++) {
-      p_que[i]->h_entry[j] = NULL;
+  {
+    int i, j, k;
+    uchar context[cont_len];
+    CODE id;
+
+    i = 0;
+    while (i < size_w) {
+      j = i - cont_len;
+      k = 0;
+      while (k < cont_len) {
+	if (j < 0) {
+	  context[k++] = HEAD_PCODE; j++;
+	}
+	else {
+	  context[k++] = mchar_table[seq[j++].code];
+	}
+      }
+      id = getContextID(mchar_size, cont_len, context);
+      seq[i++].pcode = id;
     }
-    p_que[i]->p_head = 
-      (PAIR **)malloc(sizeof(PAIR *) * p_max);
-    for (j = 0; j < p_max; j++) {
-      p_que[i]->p_head[j] = NULL;
+  }
+
+  p_max = (uint)ceil(sqrt((double)size_w))/num_contexts;
+  printf("p_max = %d\n", p_max);
+  {
+    uint i, j;
+    p_que = (PQUE **)malloc(sizeof(PQUE *)*num_contexts);
+    for (i = 0; i < num_contexts; i++) {
+      p_que[i] = (PQUE *)malloc(sizeof(PQUE));
+      p_que[i]->h_entry = 
+	(PAIR **)malloc(sizeof(PAIR *) * primes[INIT_HASH_NUM]);
+      for (j = 0; j < primes[INIT_HASH_NUM]; j++) {
+	p_que[i]->h_entry[j] = NULL;
+      }
+      p_que[i]->p_head = 
+	(PAIR **)malloc(sizeof(PAIR *) * p_max);
+      for (j = 0; j < p_max; j++) {
+	p_que[i]->p_head[j] = NULL;
+      }
+      p_que[i]->h_num     = INIT_HASH_NUM;
+      p_que[i]->mp_pos    = 0;
+      p_que[i]->p_max     = p_max;
+      p_que[i]->num_pairs = 0;
     }
-    p_que[i]->h_num = INIT_HASH_NUM;
-    p_que[i]->mp_pos = 0;
-    p_que[i]->p_max = p_max;
-    p_que[i]->num_pairs = 0;
   }
 
   crds = (CRDS *)malloc(sizeof(CRDS));
-  crds->txt_len    = size_w;
-  crds->char_size  = char_size;
-  crds->char_table = char_table;
-  crds->seq = seq;
-  crds->p_que = p_que;
+  crds->txt_len      = size_w;
+  crds->char_size    = char_size;
+  crds->char_table   = char_table;
+  crds->mchar_size   = mchar_size;
+  crds->mchar_table  = mchar_table;
+  crds->cont_len     = cont_len;
+  crds->num_contexts = num_contexts;
+  crds->seq          = seq;
+  crds->p_que        = p_que;
 
-  initCRDS(crds);
+  {
+    uint i;
+    PCODE P;
+    CODE A, B;
+    PAIR *pair;
+    
+    for (i = 0; i < size_w - 1; i++) {
+      P = seq[i].pcode;
+      A = seq[i].code;
+      B = seq[i+1].code;
+      if ((pair = locatePair(crds, P, A, B)) == NULL) {
+	pair = createPair(crds, P, A, B, i);
+      }
+      else {
+	seq[i].prev = pair->b_pos;
+	seq[i].next = DUMMY_POS;
+	seq[pair->b_pos].next = i;
+	pair->b_pos = i;
+	incrementPair(crds, pair);
+      }
+    }
+    for (i = 0; i < num_contexts; i++) {
+      deletePQ(crds, 1, i);
+    }
+  }
 
   return crds;
 }
@@ -467,7 +536,7 @@ void destructCRDS(CRDS *crds)
 
   free(crds->seq);
   free(crds->char_table);
-  for (i = 0; i < crds->char_size; i++) {
+  for (i = 0; i < crds->num_contexts; i++) {
     free(crds->p_que[i]->h_entry);
     free(crds->p_que[i]->p_head);
     free(crds->p_que[i]);
@@ -477,9 +546,9 @@ void destructCRDS(CRDS *crds)
 }
 
 static
-PAIR *getMaxPair(CRDS *crds, PCODE pchar)
+PAIR *getMaxPair(CRDS *crds, PCODE pcode)
 {
-  PQUE *p_que = crds->p_que[pchar];
+  PQUE *p_que = crds->p_que[pcode];
   uint i = p_que->mp_pos;
   PAIR *p;
   PAIR *max_pair;
@@ -525,7 +594,7 @@ uint leftPos(CRDS *crds, uint pos)
     return seq[pos-1].next;
   }
   else {
-    return pos-1;
+    return pos - 1;
   }
 }
 
@@ -543,7 +612,7 @@ uint rightPos(CRDS *crds, uint pos)
     return seq[pos+1].prev;
   }
   else {
-    return pos+1;
+    return pos + 1;
   }
 }
 
@@ -576,16 +645,16 @@ void updateBlock(CRDS *crds, CODE new_code, uint target_pos)
   SEQ *seq = crds->seq;
   uint l_pos, r_pos, rr_pos, nx_pos;
   CODE c_code, r_code, l_code, rr_code;
-  PCODE c_pchar, r_pchar, l_pchar;
+  PCODE c_pcode, r_pcode, l_pcode;
   PAIR *l_pair, *c_pair, *r_pair;
 
   l_pos   = leftPos(crds, target_pos);
   r_pos   = rightPos(crds, target_pos);
   rr_pos  = rightPos(crds, r_pos);
   c_code  = seq[target_pos].code;
-  c_pchar = seq[target_pos].pchar;
+  c_pcode = seq[target_pos].pcode;
   r_code  = seq[r_pos].code;
-  r_pchar = seq[r_pos].pchar;
+  r_pcode = seq[r_pos].pcode;
 
   nx_pos = seq[target_pos].next;
   if (nx_pos == r_pos) {
@@ -597,19 +666,19 @@ void updateBlock(CRDS *crds, CODE new_code, uint target_pos)
 
   if (l_pos != DUMMY_POS) {
     l_code = seq[l_pos].code;
-    l_pchar = seq[l_pos].pchar;
+    l_pcode = seq[l_pos].pcode;
     assert(seq[l_pos].code != DUMMY_CODE);
     removeLink(crds, l_pos);
-    if ((l_pair = locatePair(crds, l_pchar, l_code, c_code)) != NULL) {
+    if ((l_pair = locatePair(crds, l_pcode, l_code, c_code)) != NULL) {
       if (l_pair->f_pos == l_pos) {
 	l_pair->f_pos = seq[l_pos].next;
       }
       decrementPair(crds, l_pair);
     }
-    if ((l_pair = locatePair(crds, l_pchar, l_code, new_code)) == NULL) {
+    if ((l_pair = locatePair(crds, l_pcode, l_code, new_code)) == NULL) {
       seq[l_pos].prev = DUMMY_POS;
       seq[l_pos].next = DUMMY_POS;
-      createPair(crds, l_pchar, l_code, new_code, l_pos);
+      createPair(crds, l_pcode, l_code, new_code, l_pos);
     }
     else {
       seq[l_pos].prev = l_pair->b_pos;
@@ -628,7 +697,7 @@ void updateBlock(CRDS *crds, CODE new_code, uint target_pos)
   if (rr_pos != DUMMY_POS) {
     rr_code = seq[rr_pos].code;
     assert(rr_code != DUMMY_CODE);
-    if ((r_pair = locatePair(crds, r_pchar, r_code, rr_code)) != NULL) {
+    if ((r_pair = locatePair(crds, r_pcode, r_code, rr_code)) != NULL) {
       if (r_pair->f_pos == r_pos) {
 	r_pair->f_pos = seq[r_pos].next;
       }
@@ -645,22 +714,10 @@ void updateBlock(CRDS *crds, CODE new_code, uint target_pos)
       seq[rr_pos-1].prev = DUMMY_POS;
       seq[rr_pos-1].next = target_pos;
     }
-    /*
-    if (seq[target_pos+2].code == DUMMY_CODE) {
-      if( target_pos+2 < rr_pos-1) {
-	seq[target_pos+2].prev = seq[target_pos+2].next = DUMMY_POS;
-      }
-    }
-    if (seq[rr_pos-2].code == DUMMY_CODE) { 
-      if (rr_pos-2 > target_pos+1) {
-	seq[rr_pos-2].prev = seq[rr_pos-2].next = DUMMY_POS;
-      }
-    }
-    */
     if (nx_pos > rr_pos) {
-      if ((c_pair = locatePair(crds, c_pchar, new_code, rr_code)) == NULL) {
+      if ((c_pair = locatePair(crds, c_pcode, new_code, rr_code)) == NULL) {
 	seq[target_pos].prev = seq[target_pos].next = DUMMY_POS;
-	createPair(crds, c_pchar, new_code, rr_code, target_pos);
+	createPair(crds, c_pcode, new_code, rr_code, target_pos);
       }
       else {
 	seq[target_pos].prev = c_pair->b_pos;
@@ -711,23 +768,27 @@ DICT *createDict(CRDS *crds, uint code_len)
   CODE *left, *right;
   DICT *dict = (DICT *)malloc(sizeof(DICT));
 
-  dict->txt_len   = crds->txt_len;
-  dict->code_len  = code_len;
-  dict->char_size = crds->char_size;
+  dict->txt_len      = crds->txt_len;
+  dict->code_len     = code_len;
+  dict->char_size    = crds->char_size;
+  dict->mchar_size   = crds->mchar_size;
+  dict->cont_len     = crds->cont_len;
+  dict->num_contexts = crds->num_contexts;
+  dict->echar_table  = 
+    (uchar *)malloc(sizeof(uchar)*dict->char_size);
 
-  dict->echar_table = 
-    (CODE *)malloc(sizeof(CODE)*dict->char_size);
-  for (i = 0; i < dict->char_size; i++) 
-    dict->echar_table[i] = DUMMY_CODE;
   for (i = 0; i < MAX_CHAR_SIZE; i++) {
     if ((c = crds->char_table[i]) != DUMMY_CODE) {
-      dict->echar_table[c] = i;
+      assert(c < dict->char_size);
+      dict->echar_table[(uchar)c] = i;
     }
   }
 
+  dict->mchar_table = crds->mchar_table;
+
   dict->rule = 
-    (RULE **)malloc(sizeof(RULE *) * dict->char_size);
-  for (i = 0; i < dict->char_size; i++) {
+    (RULE **)malloc(sizeof(RULE *) * dict->num_contexts);
+  for (i = 0; i < dict->num_contexts; i++) {
     left  = 
       (CODE *)malloc(sizeof(CODE) * INIT_DICTIONARY_SIZE);
     right = 
@@ -756,9 +817,9 @@ DICT *createDict(CRDS *crds, uint code_len)
 static
 CODE addNewPair(DICT *dict, CODE new_code, PAIR *max_pair)
 {
-  CODE pchar = max_pair->pchar;
-  RULE *rule = dict->rule[pchar];
-  
+  CODE pcode = max_pair->pcode;
+  RULE *rule = dict->rule[pcode];
+
   rule->left[new_code]  = max_pair->left;
   rule->right[new_code] = max_pair->right;
 
@@ -766,7 +827,7 @@ CODE addNewPair(DICT *dict, CODE new_code, PAIR *max_pair)
   if (rule->num_rules >= rule->buff_size) {
     rule->buff_size *= DICTIONARY_SCALING_FACTOR;
     rule->left  = 
-      (CODE *)realloc(rule->left, sizeof(CODE) * rule->buff_size);
+      (CODE *)realloc(rule->left,  sizeof(CODE) * rule->buff_size);
     rule->right = 
       (CODE *)realloc(rule->right, sizeof(CODE) * rule->buff_size);
     if (rule->left == NULL || rule->right == NULL) {
@@ -774,7 +835,6 @@ CODE addNewPair(DICT *dict, CODE new_code, PAIR *max_pair)
       exit(1);
     }
   }
-
   return new_code;
 }
 
@@ -803,8 +863,7 @@ void copyCompSeq(CRDS *crds, DICT *dict)
       i = seq[i].prev;
       continue;
     }
-    comp_seq[j++] = seq[i].code;
-    i++;
+    comp_seq[j++] = seq[i++].code;
   }
   dict->comp_seq = comp_seq;
   dict->seq_len  = seq_len;
@@ -835,11 +894,10 @@ void outputCompTxt8(DICT *dict, FILE *output)
 {
   uint i, j;
   RULE *rule;
-
-  for (i = 0; i < dict->char_size; i++) {
+  for (i = 0; i < dict->num_contexts; i++) {
     rule = dict->rule[i];
     for (j = dict->char_size; j < rule->num_rules; j++) {
-      fwrite(&(rule->left[j]), 1, 1, output);
+      fwrite(&(rule->left[j]),  1, 1, output);
       fwrite(&(rule->right[j]), 1, 1, output);
     }
   }
@@ -854,7 +912,7 @@ void outputCompTxt16(DICT *dict, FILE *output)
   uint i, j;
   RULE *rule;
 
-  for (i = 0; i < dict->char_size; i++) {
+  for (i = 0; i < dict->num_contexts; i++) {
     rule = dict->rule[i];
     for (j = dict->char_size; j < rule->num_rules; j++) {
       fwrite(&(rule->left[j]),  2, 1, output);
@@ -874,7 +932,7 @@ void outputCompTxtVar(DICT *dict, FILE *output)
   BITOUT *bitout;
 
   bitout = createBitout(output);
-  for (i = 0; i < dict->char_size; i++) {
+  for (i = 0; i < dict->num_contexts; i++) {
     rule = dict->rule[i];
     for (j = dict->char_size; j < rule->num_rules; j++) {
       writeBits(bitout, rule->left[j],  dict->code_len);
@@ -885,20 +943,23 @@ void outputCompTxtVar(DICT *dict, FILE *output)
     writeBits(bitout, dict->comp_seq[i], dict->code_len);
   }
   flushBitout(bitout);
+  destructBitout(bitout);
 }
 
 void OutputCompTxt(DICT *dict, FILE *output)
 {
   uint i;
+  fwrite(&(dict->code_len),     sizeof(uint), 1, output);
+  fwrite(&(dict->txt_len),      sizeof(uint), 1, output);
+  fwrite(&(dict->char_size),    sizeof(uint), 1, output);
+  fwrite(&(dict->mchar_size),   sizeof(uint), 1, output);
+  fwrite(&(dict->cont_len),     sizeof(uint), 1, output);
+  fwrite(&(dict->num_contexts), sizeof(uint), 1, output);
+  fwrite(&(dict->seq_len),      sizeof(uint), 1, output);
+  fwrite(dict->echar_table,     sizeof(uchar), dict->char_size, output);
+  fwrite(dict->mchar_table,     sizeof(uchar), dict->char_size, output);
 
-  fwrite(&(dict->code_len),  sizeof(uint), 1, output);
-  fwrite(&(dict->txt_len),   sizeof(uint), 1, output);
-  fwrite(&(dict->char_size), sizeof(uint), 1, output);
-  fwrite(&(dict->seq_len),   sizeof(uint), 1, output);
-  for (i = 0; i < dict->char_size; i++) {
-    fwrite(&(dict->echar_table[i]), sizeof(uchar), 1, output);
-  }
-  for (i = 0; i < dict->char_size; i++) {
+  for (i = 0; i < dict->num_contexts; i++) {
     fwrite(&(dict->rule[i]->num_rules), sizeof(uint), 1, output);
   }
 
@@ -918,31 +979,35 @@ void OutputCompTxt(DICT *dict, FILE *output)
 void DestructDict(DICT *dict)
 {
   uint i;
-  for (i = 0; i < dict->char_size; i++) {
+  for (i = 0; i < dict->num_contexts; i++) {
     free(dict->rule[i]->left);
     free(dict->rule[i]->right);
     free(dict->rule[i]);
   }
   free(dict->echar_table);
+  free(dict->mchar_table);
   free(dict->rule);
   free(dict->comp_seq);
   free(dict);
 }
 
 static
-double calCompRatio(uint txt_len, uint char_size, uint seq_len, 
-		    uint t_num_rules, uint code_len, bool print)
+double calCompRatio(uint txt_len, uint char_size, uint cont_len, 
+		    uint num_contexts, uint seq_len, uint t_num_rules, 
+		    uint code_len, bool print)
 {
-  uint total_size;
-  uint head_size;
-  uint dict_bits, seq_bits;
-  uint dict_size, seq_size;
+  ulong total_size;
+  ulong head_size;
+  ulong dict_bits, seq_bits;
+  ulong dict_size, seq_size;
   double comp_ratio;
 
-  total_size = 0;
-  head_size  = sizeof(uint)*4+(sizeof(uint)+sizeof(uchar))*char_size;
+  head_size  = 7 * sizeof(uint);
+  head_size += 2 * sizeof(uchar) * char_size;
+  head_size += sizeof(CODE) * num_contexts;
   dict_size  = 0;
   seq_size   = 0;
+  total_size = 0;
 
   if (code_len == 8) {
     dict_size  = t_num_rules * 2 * sizeof(uchar);
@@ -969,10 +1034,10 @@ double calCompRatio(uint txt_len, uint char_size, uint seq_len,
     printf("\n");
     printf("///////////////////////////////////\n");
     printf(" |D| = %d, |S| = %d.\n", t_num_rules, seq_len);
-    printf(" Header     = %d (bytes).\n", head_size);
-    printf(" Dictionary = %d (bytes).\n", dict_size);
-    printf(" Sequence   = %d (bytes).\n", seq_size);
-    printf(" Total      = %d (bytes).\n", total_size);
+    printf(" Header     = %ld (bytes).\n", head_size);
+    printf(" Dictionary = %ld (bytes).\n", dict_size);
+    printf(" Sequence   = %ld (bytes).\n", seq_size);
+    printf(" Total      = %ld (bytes).\n", total_size);
     printf(" Comp.ratio = %0.3f [%%].\n", comp_ratio);
     printf("///////////////////////////////////\n");
     printf("\n");
@@ -981,7 +1046,7 @@ double calCompRatio(uint txt_len, uint char_size, uint seq_len,
   return comp_ratio;
 }
 
-DICT *RunCodeRepair(FILE *input, uint code_len)
+DICT *RunCodeRepair(FILE *input, uint code_len, uint cont_len, uint mchar_size) 
 {
   uint i, j;
   CRDS *crds;
@@ -998,13 +1063,14 @@ DICT *RunCodeRepair(FILE *input, uint code_len)
   printf("\n");
   printf("Initializing ...\n");
 #endif
-  crds = createCRDS(input);
+  crds = createCRDS(input, cont_len, mchar_size);
   dict = createDict(crds, code_len);
 
 #ifdef DISPLAY
   printf("///////////////////////////////////////\n");
   printf(" Input text size = %d (bytes).\n", crds->txt_len);
   printf(" Alphabet size   = %d.\n", crds->char_size);
+  printf(" # of contexts   = %d.\n", crds->num_contexts);
   printf(" Code length     = %d (bits).\n", code_len);
   printf(" # of new_code   = %d.\n", limit - crds->char_size);
   printf("///////////////////////////////////////\n");
@@ -1012,7 +1078,7 @@ DICT *RunCodeRepair(FILE *input, uint code_len)
   printf("Compressing text ...\n");
 #endif
 
-  mp_ary = (PAIR**)malloc(sizeof(PAIR*)*(crds->char_size+1));
+  mp_ary = (PAIR **)malloc(sizeof(PAIR *) * (crds->num_contexts + 1));
   num_loop = 0; num_replaced = 0;
   new_code = crds->char_size;
   t_num_rules = 0;
@@ -1020,15 +1086,16 @@ DICT *RunCodeRepair(FILE *input, uint code_len)
 
   //select replaced pairs
   while (new_code < limit) {
-    for (i = 0; i <= crds->char_size; i++) {
+    for (i = 0; i <= crds->num_contexts; i++) {
       mp_ary[i] = NULL;
     }
-    for (i = 0; i < crds->char_size; i++) {
+    for (i = 0; i < crds->num_contexts; i++) {
       mp_ary[i] = getMaxPair(crds, i);
     }
+
     //sort mp_ary by frequencies.
-    qsort(mp_ary, crds->char_size+1, sizeof(PAIR*), 
-	  (int(*)(const void*, const void*))comparePair);
+    qsort(mp_ary, crds->num_contexts + 1, sizeof(PAIR *), 
+	  (int(*)(const void *, const void *))comparePair);
 
     //if mp_ary is empty, then break.
     if (mp_ary[0] == NULL) break;
@@ -1041,10 +1108,11 @@ DICT *RunCodeRepair(FILE *input, uint code_len)
     }
 
 #ifdef DISPLAY
-    comp_ratio = calCompRatio(crds->txt_len, crds->char_size, 
-			      c_seq_len, t_num_rules, code_len, false);
-    printf("\rnew_code = [%5d], Comp.ratio = %0.3f %%.",
-	   new_code, comp_ratio);
+    comp_ratio = 
+      calCompRatio(crds->txt_len, crds->char_size, crds->cont_len,
+		   crds->num_contexts, c_seq_len, t_num_rules, code_len, false);
+	  printf("\r");
+    printf("new_code = [%5d], Comp.ratio = %0.3f %%.",new_code, comp_ratio);
     fflush(stdout);
 #endif
 
@@ -1053,19 +1121,18 @@ DICT *RunCodeRepair(FILE *input, uint code_len)
       destructPair(crds, mp_ary[i]);
     }
     //free unused pairs
-    for (i = 0; i < crds->char_size; i++) {
+    for (i = 0; i < crds->num_contexts; i++) {
       for (j = 1; j < THRESHOLD; j++) {
 	deletePQ(crds, j, i);
       }
     }
-
     new_code++;
   }
 
 #ifdef DISPLAY
   printf("\n");
-  calCompRatio(crds->txt_len, crds->char_size, 
-	       c_seq_len, t_num_rules, code_len, true);
+  calCompRatio(crds->txt_len, crds->char_size, crds->cont_len, 
+	       crds->num_contexts, c_seq_len, t_num_rules, code_len, true);
 #endif
 
   //post processing

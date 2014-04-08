@@ -100,6 +100,13 @@ void flushBitout(BITOUT *b)
   b->emplen = LONG_BITS;
 }
 
+void destructBitout(BITOUT *b)
+{
+  if (b == NULL) return;
+  if (b->buftop != NULL) free(b->buftop);
+  free(b);
+}
+
 /************** END BITOUT ********************/
 
 
@@ -174,6 +181,13 @@ void flushBitout32(BITOUT32 *b)
   b->emplen = INT_BITS;
 }
 
+void destructBitout32(BITOUT32 *b)
+{
+  if (b == NULL) return;
+  if (b->buftop != NULL) free(b->buftop);
+  free(b);
+}
+
 /************* END BITOUT32 ***************/
 
 
@@ -241,6 +255,13 @@ ulong readBits(BITIN *b, const uint rblen) {
   return x;
 }
 
+void destructBitin(BITIN *b)
+{
+  if (b == NULL) return;
+  if (b->buftop != NULL) free(b->buftop);
+  free(b);
+}
+
 /********** END BITIN ************/
 
 
@@ -306,6 +327,13 @@ uint readBits32(BITIN32 *b, const uint rblen) {
     }
   }
   return x;
+}
+
+void destructBitin32(BITIN32 *b)
+{
+  if (b == NULL) return;
+  if (b->buftop != NULL) free(b->buftop);
+  free(b);
 }
 
 /************* END BITIN32 **************/

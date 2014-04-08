@@ -205,7 +205,7 @@ bool encodePattern(uchar *pat, uint plen, DICT *dict)
 
   for (i = 0; i < plen; i++) {
     if ((c = dict->char_table[pat[i]]) == -1) {
-      return false; //including not existed character.
+      return false; //including no existing characters.
     }
     pat[i] = (uchar)c;
   }
@@ -262,7 +262,7 @@ DICT *mkDict(FILE *input)
   }
 #endif
 
-  dict->char_table = (short*)calloc(256, sizeof(short));
+  dict->char_table = (short*)malloc(256*sizeof(short));
   for (i = 0; i < 256; i++) {
     dict->char_table[i] = -1;
   }

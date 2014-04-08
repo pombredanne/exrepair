@@ -1,5 +1,5 @@
 /* 
- *  Copyright (c) 2011 Shirou Maruyama
+ *  Copyright (c) 2011-2012 Shirou Maruyama
  * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
@@ -26,6 +26,7 @@
 #include <math.h>
 #include "basics.h"
 #include "bits.h"
+#include "cont.h"
 
 typedef struct Rule {
   uint num_rules;
@@ -38,14 +39,18 @@ typedef struct Dictionary {
   uint txt_len;
   uint code_len;
   uint char_size;
-  CODE *echar_table;
+  uchar *echar_table;
+  uint mchar_size;
+  uchar *mchar_table;
+  uint cont_len;
+  uint num_contexts;
   RULE **rule;
   uint seq_len;
   CODE *comp_seq;
 } DICT;
 
-DICT *RunCodeRepair(FILE *input, uint code_len);
+DICT *RunCodeRepair(FILE *input, uint code_len, uint cont_len, uint mchar_size);
 void DestructDict(DICT *dict);
 void OutputCompTxt(DICT *dict, FILE *output);
 
-#endif
+#endif /* CREPAIR_H */

@@ -1,27 +1,27 @@
 # Makefile
 
-SRCS	= exrepair.c exdespair.c cpm.c cpm8.c bits.c timer.c
-TARGET	= exrepair exdespair cpm cpm8
+SRCS	= exrepair.c exdespair.c cpm.c cpm8.c simple_trie.c cont.c bits.c timer.c
+TARGET	= exrepair exdespair
 
 OBJS	= $(SRCS:%.c=%.o)
-CC	= g++
-CFLAGS	= -O3 -fomit-frame-pointer -DNDEBUG -Wall
+CC	= gcc
+CFLAGS	= -O2 -DNDEBUG -Wall
 LIB	= -lm
 
 all: 
 	make clean
 	make $(TARGET)
 
-exrepair: main.cpp exrepair.o bits.o
+exrepair: main.c exrepair.o cont.o bits.o
 	$(CC) $(CFLAGS) -DCREPAIR -o $@ $^ $(LIB)
 
-exdespair: main.cpp exdespair.o bits.o
+exdespair: main.c exdespair.o cont.o bits.o
 	$(CC) $(CFLAGS) -DCDESPAIR -o $@ $^ $(LIB)
 
-cpm: main.cpp cpm.o bits.o timer.o
+cpm: main.c cpm.o bits.o timer.o
 	$(CC) $(CFLAGS) -DCPM -o $@ $^ $(LIB)
 
-cpm8: main.cpp cpm8.o timer.o
+cpm8: main.c cpm8.o timer.o
 	$(CC) $(CFLAGS) -DCPM8 -o $@ $^ $(LIB)
 
 clean:
@@ -30,10 +30,12 @@ clean:
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-exrepair.o: exrepair.h bits.h
-exdespair.o: exdespair.h basics.h bits.h
-cpm.o: basics.h bits.h cpm.h
-cpm8.o: basics.h cpm8.h
+exrepair.o: exrepair.h cont.h bits.h basics.h
+exdespair.o: basics.h cont.h bits.h basics.h
+cpm.o: basics.h bits.h cpm.h basics.h
+cpm8.o: basics.h cpm8.h basics.h
+simple_trie.o: basics.h
+getID.o: basics.h
 bits.o: bits.h basics.h
 timer.o: timer.h
 
